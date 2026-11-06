@@ -1,0 +1,131 @@
+// HTTP-сервер: API + статика (Web/PWA). Без фреймворков, только встроенные модули Node.
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ROOT } from './config.js';
+import { HttpError } from './util.js';
+import { match } from './routes.js';
+import { COOKIE, userFromToken } from './services/auth.js';
+
+const PUBLIC = path.join(ROOT, 'public');
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+};
+
+function parseCookies(header = '') {
+  return Object.fromEntries(
+    header.split(';').map((p) => p.trim().split('=')).filter(([k]) => k).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))])
+  );
+}
+
+function readBody(req, limit = 200_000) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new HttpError(413, 'Слишком большой запрос'));
+        req.destroy();
+      } else chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, data, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.end(JSON.stringify(data));
+}
+
+function serveStatic(req, res, pathname) {
+  let file = path.normalize(path.join(PUBLIC, decodeURIComponent(pathname)));
+  if (!file.startsWith(PUBLIC)) return sendJson(res, 403, { error: 'Forbidden' });
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    if (path.extname(pathname)) return sendJson(res, 404, { error: 'Not found' });
+    file = path.join(PUBLIC, 'index.html'); // SPA fallback
+  }
+  const ext = path.extname(file);
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' || file.endsWith('sw.js') ? 'no-cache' : 'public, max-age=300',
+    ...SECURITY_HEADERS,
+  });
+  if (req.method === 'HEAD') return res.end();
+  fs.createReadStream(file).pipe(res);
+}
+
+async function handle(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const pathname = url.pathname;
+
+  if (!pathname.startsWith('/api/')) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: 'Method not allowed' });
+    return serveStatic(req, res, pathname);
+  }
+
+  const found = match(req.method, pathname);
+  if (!found) return sendJson(res, 404, { error: 'Метод API не найден' });
+
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies[COOKIE];
+  const headers = {};
+  const ctx = {
+    req,
+    res,
+    params: found.params,
+    query: Object.fromEntries(url.searchParams),
+    token,
+    user: userFromToken(token),
+    ip: req.socket.remoteAddress,
+    body: {},
+    setCookie: (c) => (headers['Set-Cookie'] = c),
+  };
+
+  try {
+    if (req.method !== 'GET') {
+      // Защита от CSRF: только JSON и только со своего сайта
+      const ct = req.headers['content-type'] || '';
+      if (!ct.includes('application/json')) throw new HttpError(415, 'Ожидается JSON');
+      const origin = req.headers.origin;
+      if (!found.route.public && origin && new URL(origin).host !== req.headers.host) throw new HttpError(403, 'Запрос с чужого сайта');
+      const raw = await readBody(req);
+      ctx.body = raw ? JSON.parse(raw) : {};
+      if (typeof ctx.body !== 'object' || ctx.body === null) ctx.body = {};
+    }
+    const result = await found.route.handler(ctx);
+    if (found.route.raw) return;
+    sendJson(res, 200, result ?? { ok: true }, headers);
+  } catch (err) {
+    if (err instanceof SyntaxError) return sendJson(res, 400, { error: 'Некорректный JSON' });
+    if (err instanceof HttpError) return sendJson(res, err.status, { error: err.message, details: err.details }, headers);
+    console.error('[api]', req.method, pathname, err);
+    sendJson(res, 500, { error: 'Внутренняя ошибка сервера' });
+  }
+}
+
+export function createServer() {
+  return http.createServer((req, res) => {
+    handle(req, res).catch((e) => {
+      console.error(e);
+      if (!res.headersSent) sendJson(res, 500, { error: 'Внутренняя ошибка сервера' });
+    });
+  });
+}
