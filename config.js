@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// В собранной версии (attention-bank.mjs) файл лежит в корне проекта, в исходниках — в server/
+export const BUNDLED = process.env.AB_BUNDLED === '1';
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), BUNDLED ? '.' : '..');
 
 // Мини-загрузчик .env (без зависимостей)
 function loadEnv() {

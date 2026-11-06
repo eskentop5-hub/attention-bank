@@ -1,8 +1,5 @@
 // Демо-данные: проходят через те же сервисы, что и реальные действия
 // (ледж, проверка, начисления) — поэтому база всегда консистентна.
-import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { config } from './config.js';
 
 export async function seedDemo({ log = console.log } = {}) {
   const { one, run, tx } = await import('./db.js');
@@ -167,13 +164,4 @@ export async function seedDemo({ log = console.log } = {}) {
   });
   log('[seed] демо-данные созданы: demo@attention.bank / studio@attention.bank / apps@attention.bank (пароль demo1234)');
   return true;
-}
-
-// npm run seed — пересоздать базу с демо-данными
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv.includes('--reset')) {
-    for (const suffix of ['', '-wal', '-shm']) fs.rmSync(config.dbPath + suffix, { force: true });
-    console.log('[seed] база удалена:', config.dbPath);
-  }
-  await seedDemo();
 }

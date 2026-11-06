@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config, ROOT } from './config.js';
+import ASSETS from './assets.js';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
 export const db = new DatabaseSync(config.dbPath);
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-db.exec(fs.readFileSync(path.join(ROOT, 'server', 'schema.sql'), 'utf8'));
+db.exec(ASSETS ? Buffer.from(ASSETS['schema.sql'], 'base64').toString('utf8') : fs.readFileSync(path.join(ROOT, 'server', 'schema.sql'), 'utf8'));
 
 // Короткие помощники
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

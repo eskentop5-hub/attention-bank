@@ -8,9 +8,10 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "start": "node --disable-warning=ExperimentalWarning attention-bank.mjs",
     "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
-    "seed": "node --disable-warning=ExperimentalWarning server/seed.js --reset",
+    "build": "node scripts/build.mjs",
+    "seed": "node --disable-warning=ExperimentalWarning server/seed-cli.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/flow.test.js"
   }
 }

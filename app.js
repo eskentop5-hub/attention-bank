@@ -6,6 +6,7 @@ import { ROOT } from './config.js';
 import { HttpError } from './util.js';
 import { match } from './routes.js';
 import { COOKIE, userFromToken } from './services/auth.js';
+import ASSETS from './assets.js';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -56,6 +57,7 @@ function sendJson(res, status, data, headers = {}) {
 }
 
 function serveStatic(req, res, pathname) {
+  if (ASSETS) return serveEmbedded(req, res, pathname);
   let file = path.normalize(path.join(PUBLIC, decodeURIComponent(pathname)));
   if (!file.startsWith(PUBLIC)) return sendJson(res, 403, { error: 'Forbidden' });
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
@@ -70,6 +72,22 @@ function serveStatic(req, res, pathname) {
   });
   if (req.method === 'HEAD') return res.end();
   fs.createReadStream(file).pipe(res);
+}
+
+// Сайт, встроенный в attention-bank.mjs
+function serveEmbedded(req, res, pathname) {
+  let key = 'public' + decodeURIComponent(pathname);
+  if (!ASSETS[key]) {
+    if (path.extname(pathname)) return sendJson(res, 404, { error: 'Not found' });
+    key = 'public/index.html';
+  }
+  const ext = path.extname(key);
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' || key.endsWith('sw.js') ? 'no-cache' : 'public, max-age=300',
+    ...SECURITY_HEADERS,
+  });
+  res.end(req.method === 'HEAD' ? undefined : Buffer.from(ASSETS[key], 'base64'));
 }
 
 async function handle(req, res) {

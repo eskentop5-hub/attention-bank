@@ -82,8 +82,13 @@ export async function handleUpdate(update) {
   const cmd = rawCmd.split('@')[0].toLowerCase();
   const user = one('SELECT * FROM users WHERE telegram_chat_id = ?', String(chatId));
 
+  if (cmd === '/chatid') {
+    // Помогает узнать ID группы для TELEGRAM_GROUP_ID
+    return reply(chatId, `ID этого чата: <code>${chatId}</code>\nВставьте его в TELEGRAM_GROUP_ID.`);
+  }
+
   if (!isPrivate) {
-    // В группе отвечаем только на /tasks
+    // В группе отвечаем только на /tasks и /chatid
     if (cmd === '/tasks') return reply(chatId, tasksText(), linkButton('Все задания', '/#/tasks'));
     return;
   }

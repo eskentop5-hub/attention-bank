@@ -30,13 +30,20 @@ npm start
 
 На странице входа есть кнопки демо-доступа.
 
+На Windows можно просто дважды кликнуть `start-windows.bat`.
+
 Другие команды:
 
 ```bash
-npm test      # автотесты всего цикла (9 сценариев, включая Telegram и безопасность)
-npm run seed  # сбросить базу и заново заполнить демо-данными
-npm run dev   # запуск с автоперезагрузкой при изменении кода
+npm test       # автотесты всего цикла (9 сценариев, включая Telegram и безопасность)
+npm run seed   # сбросить базу и заново заполнить демо-данными
+npm run dev    # запуск из исходников (server/) с автоперезагрузкой
+npm run build  # пересобрать attention-bank.mjs после изменения кода (нужен esbuild: npm i -D esbuild)
 ```
+
+### Как устроен запуск
+
+`npm start` запускает **один файл `attention-bank.mjs`**. В нём собраны сервер, сайт, бот и схема базы. Для работы (и для Render) достаточно двух файлов: **`package.json` + `attention-bank.mjs`**. Исходный код для чтения и правок лежит в папках `server/` и `public/`. После изменений в них выполните `npm run build`.
 
 ---
 
@@ -184,8 +191,11 @@ User completes task → Server validates → Server creates transaction → Data
 
 ```
 attention-bank/
+├─ attention-bank.mjs    СОБРАННАЯ версия — её запускает npm start
+├─ start-windows.bat     запуск двойным кликом на Windows
+├─ scripts/build.mjs     сборка attention-bank.mjs
 ├─ server/
-│  ├─ index.js            запуск
+│  ├─ index.js            запуск из исходников
 │  ├─ app.js              HTTP-сервер, статика, CSRF, заголовки безопасности
 │  ├─ routes.js           все API-маршруты
 │  ├─ db.js, schema.sql   SQLite, атомарные транзакции
@@ -217,7 +227,9 @@ attention-bank/
 
 ## Деплой
 
-Подойдёт любой хостинг с Node.js 22+ (Render, Railway, VPS). Команда запуска: `npm start`. Укажите `PUBLIC_URL=https://ваш-домен` (нужен для кнопок в Telegram и защищённых cookie). Для постоянного хранения данных подключите диск под `DB_PATH` или перенесите схему на PostgreSQL (`db/schema.postgres.sql`).
+Подойдёт любой хостинг с Node.js 22+ (Render, Railway, VPS). Команда запуска: `npm start`. В корне репозитория обязательно должны быть `package.json` и `attention-bank.mjs`, остальные файлы для запуска не нужны.
+
+**Render:** New → Web Service → репозиторий. Build Command: `npm install`, Start Command: `npm start`, тип Free. Переменные окружения: `NODE_VERSION=22`, `PUBLIC_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_MODE=webhook`, `TELEGRAM_WEBHOOK_SECRET`, при необходимости `TELEGRAM_GROUP_ID`. ID группы можно узнать командой `/chatid` в группе. Укажите `PUBLIC_URL=https://ваш-домен` (нужен для кнопок в Telegram и защищённых cookie). Для постоянного хранения данных подключите диск под `DB_PATH` или перенесите схему на PostgreSQL (`db/schema.postgres.sql`).
 
 ## Что дальше (после хакатона)
 
